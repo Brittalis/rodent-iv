@@ -94,6 +94,12 @@ void UciLoop() {
             p->ParsePosition(ptr);
         } else if (strcmp(token, "go") == 0)         {
             ParseGo(p, ptr);
+        } else if (strcmp(token, "evaljson") == 0)   {
+#ifndef USE_THREADS
+            EngineSingle.PrintEvalJson(p);
+#else
+            Engines.front().PrintEvalJson(p);
+#endif
         } else if (strcmp(token, "print") == 0)      {
             p->PrintBoard();
         } else if (strcmp(token, "step") == 0)       {

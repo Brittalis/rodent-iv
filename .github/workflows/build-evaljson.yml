@@ -1,0 +1,45 @@
+name: build-evaljson
+
+# Builds the forked Rodent IV and smoke-tests the new `evaljson` UCI command
+# (Advisor Insights feature for the Pieces game). Resolves M7 #60/#61.
+
+on:
+  push:
+    branches: [ "**" ]
+  pull_request:
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build (g++ / make)
+        working-directory: sources
+        run: make build
+
+      - name: Locate binary
+        id: bin
+        working-directory: sources
+        run: |
+          # The Makefile's EXENAME; adjust if the output name differs.
+          BIN=$(ls -1 rodent* 2>/dev/null | grep -vE '\.(cpp|h|vcxproj|sln|user)$' | head -1)
+          test -n "$BIN" || { echo "no binary produced"; ls -la; exit 1; }
+          echo "path=sources/$BIN" >> "$GITHUB_OUTPUT"
+
+      - name: Smoke-test evaljson
+        run: |
+          BIN="${{ steps.bin.outputs.path }}"
+          OUT=$(printf 'position fen rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1\nevaljson\nquit\n' | "./$BIN")
+          echo "$OUT"
+          # Must emit a JSON object with the expected term keys.
+          echo "$OUT" | grep -q '"Material"'      || { echo "missing Material"; exit 1; }
+          echo "$OUT" | grep -q '"OwnAttack"'     || { echo "missing OwnAttack"; exit 1; }
+          echo "$OUT" | grep -q '"PiecePressure"' || { echo "missing PiecePressure"; exit 1; }
+          echo "$OUT" | grep -q '"total"'         || { echo "missing total"; exit 1; }
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: rodent-evaljson-linux
+          path: ${{ steps.bin.outputs.path }}

@@ -994,6 +994,7 @@ class cEngine {
     void ClearAll();
     void Think(POS *p);
 	void MultiPv(POS *p, int * pv);
+	void PrintEvalJson(POS *p); // per-feature weighted eval breakdown (Advisor Insights, evaljson)
 
 #ifdef USE_TUNING
     double best_tune;
