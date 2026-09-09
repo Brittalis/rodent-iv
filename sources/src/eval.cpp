@@ -226,6 +226,74 @@ int cEngine::Evaluate(POS *p, eData *e) {
 }
 
 
+// Emits a single-line JSON object of per-feature weighted eval contributions for the
+// Advisor Insights layer (the `evaljson` UCI command). Each value is the marginal
+// contribution of one personality weight, measured by ablation:
+//
+//     contribution(term) = Evaluate(full) - Evaluate(weight[term] := 0)
+//
+// Values are side-to-move-relative centipawns, matching the engine's normal eval sign.
+// Ablation is used (rather than instrumenting the interleaved Add() accumulation) because
+// some weights are baked into derived tables (W_MATERIAL -> Par.InitPst material tables)
+// or copied into side arrays (W_OWN/OPP_ATT/MOB -> Par.InitAsymmetric); zeroing a weight
+// and re-running the relevant setup measures its true effect on the final score. This is
+// a one-shot diagnostic invoked only at decision points, so the repeated re-evaluation
+// cost is irrelevant. Keys match the AdvisorFeatureSnapshot term names on the C# side.
+void cEngine::PrintEvalJson(POS *p) {
+
+    static const struct { const char *name; int id; } kTerms[] = {
+        { "Material",      W_MATERIAL },
+        { "PrimaryPst",    W_PRIM     },
+        { "SecondaryPst",  W_SECO     },
+        { "OwnAttack",     W_OWN_ATT  },
+        { "OppAttack",     W_OPP_ATT  },
+        { "OwnMobility",   W_OWN_MOB  },
+        { "OppMobility",   W_OPP_MOB  },
+        { "FlatMobility",  W_FLAT     },
+        { "PiecePressure", W_THREATS  },
+        { "KingTropism",   W_TROPISM  },
+        { "PassedPawns",   W_PASSERS  },
+        { "PawnShield",    W_SHIELD   },
+        { "PawnStorm",     W_STORM    },
+        { "Lines",         W_LINES    },
+        { "Outposts",      W_OUTPOSTS },
+        { "Space",         W_SPACE    },
+    };
+    const int nTerms = (int)(sizeof(kTerms) / sizeof(kTerms[0]));
+
+    eData e;
+
+    // Baseline: make sure derived tables / side arrays reflect the live weights.
+    Par.InitPst();
+    Par.InitAsymmetric(p);
+    ClearAll();
+    const int total = Evaluate(p, &e);
+
+    char buf[2048];
+    int n = 0;
+    n += snprintf(buf + n, sizeof(buf) - n, "{");
+
+    for (int i = 0; i < nTerms; i++) {
+        const int saved = Par.values[kTerms[i].id];
+        Par.values[kTerms[i].id] = 0;
+        Par.InitPst();         // rebuild material tables (W_MATERIAL is baked here)
+        Par.InitAsymmetric(p); // rebuild side arrays (attack/mobility weights)
+        ClearAll();            // invalidate eval + pawn hash so the change takes effect
+        const int ablated = Evaluate(p, &e);
+        Par.values[kTerms[i].id] = saved;
+        n += snprintf(buf + n, sizeof(buf) - n, "\"%s\":%d,", kTerms[i].name, total - ablated);
+    }
+
+    n += snprintf(buf + n, sizeof(buf) - n, "\"total\":%d}\n", total);
+
+    // Restore global engine state for any subsequent search.
+    Par.InitPst();
+    Par.InitAsymmetric(p);
+    ClearAll();
+
+    printfUciOut("%s", buf);
+}
+
 void cEngine::ClearAll() {
 
     ClearPawnHash();

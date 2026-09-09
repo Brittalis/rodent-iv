@@ -39,3 +39,8 @@ sources/.vs/rodent-iv/v15/Browse.VC.db
 sources/x64/Release/rodent-iv.iobj
 *.log
 sources/.vs/rodent-iv/v15/Browse.VC.opendb
+
+# MSVC build output
+sources/x64/
+sources/Release/
+sources/Debug/
